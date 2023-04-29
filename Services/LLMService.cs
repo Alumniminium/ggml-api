@@ -46,7 +46,7 @@ public class LLMService : ILLMService
             yield return token;
         inferTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
 
-        Runner.Clear();
+        // Runner.Clear();
         Runner.Busy = false;
         
         yield return $"{Environment.NewLine}[Statistics]{Environment.NewLine}Wait: {waitTime:0.00}s{Environment.NewLine}Model Load: {modelLoadTime:0.00}s{Environment.NewLine}Ingest: {ingestTime:0.00}s{Environment.NewLine}Infer: {inferTime:0.00}s"; 
@@ -81,7 +81,7 @@ public class LLMService : ILLMService
             yield return token;
         inferTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
 
-        Runner.Clear();
+        // Runner.Clear();
         Runner.Busy = false;
         yield return $"{Environment.NewLine}[Statistics]{Environment.NewLine}Wait: {waitTime:0.00}s{Environment.NewLine}Model Load: {modelLoadTime:0.00}s{Environment.NewLine}Ingest: {ingestTime:0.00}s{Environment.NewLine}Infer: {inferTime:0.00}s";
     }
