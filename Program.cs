@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.AspNetCore.Http.Features;
 
 namespace ggml_api;
@@ -8,13 +7,6 @@ public static class Program
 
     static void Main()
     {
-        if (OperatingSystem.IsLinux() || OperatingSystem.IsWindows())
-        {
-            // I want to limit the CPU usage to 400%
-            var proc = Process.GetCurrentProcess();
-            proc.ProcessorAffinity = (1 << THREAD_COUNT) - 1;
-        }
-
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddControllers(options => options.OutputFormatters.Add(new AsyncStringOutputFormatter()));
         builder.Services.AddEndpointsApiExplorer();
@@ -29,6 +21,8 @@ public static class Program
             x.ValueLengthLimit = int.MaxValue;
             x.MultipartBodyLengthLimit = int.MaxValue;
         });
+        
+        builder.Services.AddSingleton<ILLMService, LLMService>();
 
         var app = builder.Build();
         app.UseSwagger();
