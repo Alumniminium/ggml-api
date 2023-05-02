@@ -9,91 +9,151 @@ public interface ILLMService
 {
     public IAsyncEnumerable<string> Instruct(InstructInput instruct, CancellationToken txt);
     public IAsyncEnumerable<string> Complete(ContinuationInput continuation, CancellationToken txt);
+    public string GetStatistics();
 }
 
 public class LLMService : ILLMService
 {
-    public LLaMAModel Model = LLaMAModel.FromPath("/models/ggml-wizardlm-7b-q5_1.bin");
+    public LLaMAModel Model;
     public LLaMARunner Runner;
 
-    public LLMService() => Runner = Model.CreateRunner(Program.THREAD_COUNT);
+    private double _WaitTime = 0d;
+    private double _ModelLoadTime = 0d;
+    private double _IngestTime = 0d;
+    private double _InferTime = 0d;
+    private int _Tokens;
 
-    public async IAsyncEnumerable<string> Complete(ContinuationInput dto, [EnumeratorCancellation]CancellationToken ct)
+    private double TotalTime => _WaitTime + _ModelLoadTime + _IngestTime + _InferTime;
+    private double TimePerToken => TotalTime / _Tokens;
+    public List<string> ChatHistory = new();
+
+    public LLMService()
     {
-        var waitTime = 0d;
-        var modelLoadTime = 0d;
-        var ingestTime = 0d;
-        var inferTime = 0d;
-
-        var start = Stopwatch.GetTimestamp();
-        while (Runner.Busy)
-            await Task.Delay(100);
-        waitTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
-        start = Stopwatch.GetTimestamp();
-
-        Runner.Busy = true;
-
-        SetupModel(dto.model);
-        modelLoadTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
-        start = Stopwatch.GetTimestamp();
-
-        foreach (var token in Runner.IngestPrompt(dto.input, ct))
-            yield return token;
-        ingestTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
-        start = Stopwatch.GetTimestamp();
-
-        foreach (var token in Runner.InferenceStream(dto.maxTokens, dto.top_k, dto.top_p, dto.temperature, dto.repetition_penalty, ct))
-            yield return token;
-        inferTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
-
-        // Runner.Clear();
-        Runner.Busy = false;
-        
-        yield return $"{Environment.NewLine}[Statistics]{Environment.NewLine}Wait: {waitTime:0.00}s{Environment.NewLine}Model Load: {modelLoadTime:0.00}s{Environment.NewLine}Ingest: {ingestTime:0.00}s{Environment.NewLine}Infer: {inferTime:0.00}s"; 
+        Model = new LLaMAModel(Path.Combine(Program.MODEL_DIR, Program.DEFAULT_MODEL));
+        Runner = Model.CreateRunner(Program.THREAD_COUNT);
     }
 
-    public async IAsyncEnumerable<string> Instruct(InstructInput dto, [EnumeratorCancellation]CancellationToken ct)
+
+    public async IAsyncEnumerable<string> Complete(ContinuationInput dto, [EnumeratorCancellation] CancellationToken ct)
     {
-        var waitTime = 0d;
-        var modelLoadTime = 0d;
-        var ingestTime = 0d;
-        var inferTime = 0d;
+        ResetStatistics();
+        await BusyWait();
+        SetupModel(dto.model);
 
         var start = Stopwatch.GetTimestamp();
 
-         while(Runner.Busy)
-            await Task.Delay(100);
-        waitTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
+        if (dto.input == "forget everything")
+        {
+            Runner.Clear();
+            yield return "\n\n[New Conversation]\n\n";
+            yield break;
+        }
+
+        if (dto.input != "continue")
+        {
+            foreach (var token in Runner.IngestPrompt(dto.input, ct))
+            {
+                _Tokens++;
+                if (dto.includeIngest)
+                    yield return token;
+            }
+        }
+        _IngestTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
+
+        if (dto.includeIngest && !string.IsNullOrWhiteSpace(dto.input))
+            yield return dto.input;
+
         start = Stopwatch.GetTimestamp();
-
-        Runner.Busy = true;
-
-        SetupModel(dto.model);
-        modelLoadTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
-        start = Stopwatch.GetTimestamp();
-
-        foreach (var token in Runner.Instruction(dto.instruction, dto.input, dto.output, ct))
+        foreach (var token in Runner.InferenceStream(dto.maxTokens, dto.reversePrompts, dto.ignore_eos, dto.top_k, dto.top_p, dto.temperature, dto.repetition_penalty, ct))
+        {
+            _Tokens++;
             yield return token;
-        ingestTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
-        start = Stopwatch.GetTimestamp();
+        }
+        _InferTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
 
-        foreach (var token in Runner.InferenceStream(dto.maxTokens, dto.top_k, dto.top_p, dto.temperature, dto.repetition_penalty, ct))
-            yield return token;
-        inferTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
+        if (dto.includeStatistics)
+            yield return GetStatistics();
 
-        // Runner.Clear();
         Runner.Busy = false;
-        yield return $"{Environment.NewLine}[Statistics]{Environment.NewLine}Wait: {waitTime:0.00}s{Environment.NewLine}Model Load: {modelLoadTime:0.00}s{Environment.NewLine}Ingest: {ingestTime:0.00}s{Environment.NewLine}Infer: {inferTime:0.00}s";
+    }
+
+    public async IAsyncEnumerable<string> Instruct(InstructInput dto, [EnumeratorCancellation] CancellationToken ct)
+    {
+        ResetStatistics();
+        await BusyWait();
+        SetupModel(dto.model);
+
+        var start = Stopwatch.GetTimestamp();
+        foreach (var token in Runner.Instruction(dto.instruction, dto.input, dto.output, ct))
+        {
+            _Tokens++;
+            if (dto.includeIngest)
+                yield return token;
+        }
+        _IngestTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
+
+        if (!dto.includeIngest && !string.IsNullOrWhiteSpace(dto.output))
+            yield return dto.output;
+
+        start = Stopwatch.GetTimestamp();
+        foreach (var token in Runner.InferenceStream(dto.maxTokens, dto.reversePrompts, dto.ignore_eos, dto.top_k, dto.top_p, dto.temperature, dto.repetition_penalty, ct))
+        {
+            _Tokens++;
+            yield return token;
+        }
+        _InferTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
+
+        if (dto.includeStatistics)
+            yield return GetStatistics();
+
+        Runner.Busy = false;
+    }
+
+    private async Task BusyWait()
+    {
+        var start = Stopwatch.GetTimestamp();
+
+        while (Runner.Busy)
+            await Task.Delay(100);
+        Runner.Busy = true;
+        _WaitTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
     }
 
     private void SetupModel(string model)
     {
+        var start = Stopwatch.GetTimestamp();
         if (!string.IsNullOrWhiteSpace(model) && Model.ModelName != model)
         {
             Model.Dispose();
-            Model = LLaMAModel.FromPath($"/models/{model}");
+            Model = new LLaMAModel(Path.Combine(Program.MODEL_DIR, model));
             Runner = Model.CreateRunner(Program.THREAD_COUNT);
             Runner.Busy = true;
         }
+        _ModelLoadTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
+    }
+
+    public string GetStatistics()
+    {
+        var stats = new Dictionary<string, double>
+        {
+            { "Wait Time ", _WaitTime },
+            { "Model Load", _ModelLoadTime },
+            { "Ingestion ", _IngestTime },
+            { "Inference ", _InferTime },
+            { "Total Time", TotalTime },
+            { "Token Time", TimePerToken },
+            { "Num Tokens", _Tokens },
+        };
+
+        return $"{Environment.NewLine}{{END}}{Environment.NewLine}" + string.Join(Environment.NewLine, stats.Select(kv => $"{kv.Key}: {kv.Value:0.00} sec")) + Environment.NewLine;
+    }
+
+    private void ResetStatistics()
+    {
+        _WaitTime = 0d;
+        _ModelLoadTime = 0d;
+        _IngestTime = 0d;
+        _InferTime = 0d;
+        _Tokens = 0;
     }
 }

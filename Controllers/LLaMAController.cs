@@ -18,9 +18,9 @@ public class LLaMAController : ControllerBase
     [HttpGet]
     [Route("/models")]
     [Produces("text/plain")]
-    public async IAsyncEnumerable<string> GetModels()
+    public IEnumerable<string> GetModels()
     {
-        var models = Directory.GetFiles("/models");
+        var models = Directory.GetFiles(Program.MODEL_DIR);
         foreach (var model in models)
         {
             _logger.LogInformation("{model}", model);
@@ -34,11 +34,7 @@ public class LLaMAController : ControllerBase
     public async IAsyncEnumerable<string> GetInstructionResponse([FromBody] InstructInput dto)
     {
         await foreach (var token in _llm.Instruct(dto, HttpContext.RequestAborted))
-        {
-            _logger.LogInformation("GetInstructionResponse: {token}", token);
             yield return token;
-        }
-        yield return Environment.NewLine;
     }
 
     [HttpPost]
@@ -47,9 +43,6 @@ public class LLaMAController : ControllerBase
     public async IAsyncEnumerable<string> GetContinuation([FromBody] ContinuationInput dto)
     {
         await foreach (var token in _llm.Complete(dto, HttpContext.RequestAborted))
-        {
-            _logger.LogInformation("GetContinuation: {token}", token);
             yield return token;
-        }
     }
 }

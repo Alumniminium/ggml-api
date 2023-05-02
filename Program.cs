@@ -4,10 +4,13 @@ namespace ggml_api;
 public static class Program
 {
     public static int THREAD_COUNT => Environment.GetEnvironmentVariable("THREAD_COUNT") is null ? Environment.ProcessorCount / 2 : int.Parse(Environment.GetEnvironmentVariable("THREAD_COUNT"));
+    public static string MODEL_DIR => Environment.GetEnvironmentVariable("MODEL_DIR") ?? "/models/llm/";
+    public static string DEFAULT_MODEL => Environment.GetEnvironmentVariable("DEFAULT_MODEL") ?? "ggml-wizardlm-7b-q5_1.bin";
 
     static void Main()
     {
         var builder = WebApplication.CreateBuilder();
+        builder.Services.AddControllers(options => options.OutputFormatters.Add(new StringOutputFormatter()));
         builder.Services.AddControllers(options => options.OutputFormatters.Add(new AsyncStringOutputFormatter()));
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
