@@ -9,7 +9,12 @@ public static class Program
 
     static void Main()
     {
-        var builder = WebApplication.CreateBuilder();
+        var builder = WebApplication.CreateBuilder();        
+        
+        builder.Services.ConfigureHttpJsonOptions(options => 
+        {
+            options.SerializerOptions.TypeInfoResolver = new AppJsonSerializerContext();
+        });
         builder.Services.AddControllers(options => options.OutputFormatters.Add(new StringOutputFormatter()));
         builder.Services.AddControllers(options => options.OutputFormatters.Add(new AsyncStringOutputFormatter()));
         builder.Services.AddEndpointsApiExplorer();
@@ -18,6 +23,7 @@ public static class Program
         {
             options.Limits.MaxRequestBodySize = null;
             options.Limits.MaxRequestBufferSize = null;
+            options.Listen(System.Net.IPAddress.Any, 5165);
         });
         builder.Services.Configure<FormOptions>(x =>
         {

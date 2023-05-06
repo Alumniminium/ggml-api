@@ -29,15 +29,6 @@ public class LLaMAController : ControllerBase
     }
 
     [HttpPost]
-    [Route("/instruction")]
-    [Produces("text/plain")]
-    public async IAsyncEnumerable<string> GetInstructionResponse([FromBody] InstructInput dto)
-    {
-        await foreach (var token in _llm.Instruct(dto, HttpContext.RequestAborted))
-            yield return token;
-    }
-
-    [HttpPost]
     [Route("/completion")]
     [Produces("text/plain")]
     public async IAsyncEnumerable<string> GetContinuation([FromBody] ContinuationInput dto)
