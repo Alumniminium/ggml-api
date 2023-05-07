@@ -31,7 +31,13 @@ public class LLMService : ILLMService
     {
         ResetStatistics();
         await BusyWait();
-        SetupModel(dto.model);
+        var result = SetupModel(dto.model);
+        
+        if(result != LLM.ModelName)
+        {
+            yield return result;
+            yield break;
+        }
 
         var start = Stopwatch.GetTimestamp();
 
@@ -77,16 +83,26 @@ public class LLMService : ILLMService
         _WaitTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
     }
 
-    private void SetupModel(string model)
+    private string SetupModel(string model)
     {
         var start = Stopwatch.GetTimestamp();
-        if (!string.IsNullOrWhiteSpace(model) && LLM.ModelName != model)
+        try
         {
-            LLM.Dispose();
-            LLM = new LLM(Path.Combine(Program.MODEL_DIR, model), Program.THREAD_COUNT);
-            LLM.Busy = true;
+            if (!string.IsNullOrWhiteSpace(model) && LLM.ModelName != model)
+            {
+                LLM.Dispose();
+                LLM = new LLM(Path.Combine(Program.MODEL_DIR, model), Program.THREAD_COUNT)
+                {
+                    Busy = true
+                };
+            }
+        }
+        catch
+        {
+            return "Model not found";
         }
         _ModelLoadTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
+        return LLM.ModelName;
     }
 
     public string GetStatistics()
