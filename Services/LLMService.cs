@@ -29,51 +29,56 @@ public class LLMService : ILLMService
 
     public async IAsyncEnumerable<string> Complete(ContinuationInput dto, [EnumeratorCancellation] CancellationToken ct)
     {
-        ResetStatistics();
-        await BusyWait(ct);
-        var result = SetupModel(dto.model);
-
-        if (result != LLM.ModelName)
+        try
         {
-            yield return result;
-            yield break;
-        }
+            ResetStatistics();
+            await BusyWait(ct);
+            var result = SetupModel(dto.model);
 
-        var start = Stopwatch.GetTimestamp();
+            if (result != LLM.ModelName)
+            {
+                yield return result;
+                yield break;
+            }
 
-        if (string.Equals(dto.input, "forget everything", StringComparison.InvariantCultureIgnoreCase))
-        {
-            LLM.ClearContext();
-            yield return "\n\n[New Conversation]\n\n";
-            yield break;
-        }
+            var start = Stopwatch.GetTimestamp();
 
-        if (!string.Equals(dto.input, "continue", StringComparison.InvariantCultureIgnoreCase))
-        {
-            foreach (var token in LLM.IngestPrompt(dto.input))
+            if (string.Equals(dto.input, "forget everything", StringComparison.InvariantCultureIgnoreCase))
+            {
+                LLM.ClearContext();
+                yield return "\n\n[New Conversation]\n\n";
+                yield break;
+            }
+
+            if (!string.Equals(dto.input, "continue", StringComparison.InvariantCultureIgnoreCase))
+            {
+                foreach (var token in LLM.IngestPrompt(dto.input))
+                {
+                    _Tokens++;
+                    if (dto.includeIngest)
+                        yield return token;
+                }
+            }
+            _IngestTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
+
+            start = Stopwatch.GetTimestamp();
+            foreach (var token in LLM.InferenceStream(dto.maxTokens, dto.reversePrompts, dto.ignore_eos, dto.top_k, dto.top_p, dto.temperature, dto.repetition_penalty, dto.mirostat, dto.entropy, dto.learningRate, dto.tailFreeSamplingRate, dto.typical_p, dto.penalizeNewLines, dto.penalizeSpaces, ct))
             {
                 _Tokens++;
-                if (dto.includeIngest)
-                    yield return token;
+                yield return token;
             }
-        }
-        _IngestTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
+            _InferTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
 
-        start = Stopwatch.GetTimestamp();
-        foreach (var token in LLM.InferenceStream(dto.maxTokens, dto.reversePrompts, dto.ignore_eos, dto.top_k, dto.top_p, dto.temperature, dto.repetition_penalty, dto.mirostat, dto.entropy, dto.learningRate, dto.tailFreeSamplingRate, dto.typical_p, dto.penalizeNewLines, dto.penalizeSpaces, ct))
+            if (dto.includeStatistics)
+                yield return GetStatistics();
+
+            if (dto.oneShot)
+                LLM.ClearContext();
+        }
+        finally
         {
-            _Tokens++;
-            yield return token;
+            LLM.Busy = false;
         }
-        _InferTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
-
-        if (dto.includeStatistics)
-            yield return GetStatistics();
-        
-        if (dto.oneShot)
-            LLM.ClearContext();
-
-        LLM.Busy = false;
     }
 
     private async Task BusyWait(CancellationToken ct)
