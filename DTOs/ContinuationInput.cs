@@ -18,5 +18,6 @@ public record ContinuationInput
     bool penalizeSpaces = false,
     float repetition_penalty = 1.2f,
     bool includeIngest = true,
-    bool includeStatistics = true
+    bool includeStatistics = true,
+    bool oneShot = false
 );
