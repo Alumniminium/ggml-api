@@ -24,6 +24,7 @@ public static class Program
             options.Limits.MaxRequestBodySize = null;
             options.Limits.MaxRequestBufferSize = null;
             options.Listen(System.Net.IPAddress.Any, 5165);
+            options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(10);
         });
         builder.Services.Configure<FormOptions>(x =>
         {

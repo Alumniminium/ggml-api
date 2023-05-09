@@ -30,10 +30,10 @@ public class LLMService : ILLMService
     public async IAsyncEnumerable<string> Complete(ContinuationInput dto, [EnumeratorCancellation] CancellationToken ct)
     {
         ResetStatistics();
-        await BusyWait();
+        await BusyWait(ct);
         var result = SetupModel(dto.model);
-        
-        if(result != LLM.ModelName)
+
+        if (result != LLM.ModelName)
         {
             yield return result;
             yield break;
@@ -73,12 +73,17 @@ public class LLMService : ILLMService
         LLM.Busy = false;
     }
 
-    private async Task BusyWait()
+    private async Task BusyWait(CancellationToken ct)
     {
         var start = Stopwatch.GetTimestamp();
 
         while (LLM.Busy)
+        {
             await Task.Delay(100);
+
+            if (ct.IsCancellationRequested)
+                return;
+        }
         LLM.Busy = true;
         _WaitTime = Stopwatch.GetElapsedTime(start).TotalSeconds;
     }
