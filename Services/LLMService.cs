@@ -69,6 +69,9 @@ public class LLMService : ILLMService
 
         if (dto.includeStatistics)
             yield return GetStatistics();
+        
+        if (dto.oneShot)
+            LLM.ClearContext();
 
         LLM.Busy = false;
     }
